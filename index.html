@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VocabTime - Học & Ghi Nhớ Từ Vựng Thông Minh</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Font: Nunito -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;600;700;800;900;1000&display=swap" rel="stylesheet">
+  <!-- FontAwesome 6 -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <!-- Mammoth.js for reading docx -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <!-- Canvas Confetti for victory celebrations -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+  <!-- Firebase Web SDK Compat scripts -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Nunito"', 'sans-serif'],
+          },
+          colors: {
+            vtGrayBg: '#f8fafc',
+            vtGrayBorder: '#e2e8f0',
+            vtText: '#334155',
+            vtTextDark: '#0f172a',
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Modular Stylesheet -->
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body id="appBody" class="min-h-screen flex flex-col items-center justify-start relative">
+
+  <!-- FIXED FULL VIEWPORT BACKGROUND COVER LAYER (Prevents Mobile & Desktop Bounce White Gaps) -->
+  <div id="fixedAppBgCover"></div>
+  <div id="fixedMobileBgLayer"></div>
+
+  <!-- SOFT MIST OVERLAY LAYER FOR BACKGROUND IMAGE -->
+  <div id="bgMistOverlay" class="fixed inset-0 pointer-events-none z-0 hidden transition-all duration-300"></div>
+
+  <!-- TOP HEADER (VocabTime Header) -->
+  <header class="w-full glass-card border-b-2 border-vtGrayBorder sticky top-0 z-40 shadow-xs">
+    <div class="max-w-4xl mx-auto px-4 py-2.5 flex items-center justify-between">
+      <!-- Logo VocabTime -->
+      <div class="flex items-center gap-2.5 cursor-pointer select-none" onclick="switchNav('flashcards')">
+        <div class="w-9 h-9 rounded-2xl bg-vtPurple flex items-center justify-center text-white text-lg font-black shadow-[0_2px_0_var(--vt-dark)]">
+          <i class="fa-solid fa-book-open-reader"></i>
+        </div>
+        <div>
+          <span class="font-extrabold text-base sm:text-lg text-vtPurple tracking-tight">VocabTime</span>
+          <span class="hidden sm:inline text-xs font-bold text-slate-400 ml-1">| Học Từ Vựng</span>
+        </div>
+      </div>
+
+      <!-- Learning Metrics & Settings Control -->
+      <div class="flex items-center gap-2 sm:gap-3 font-extrabold text-xs sm:text-sm">
+        <!-- Unlocked Words Progress Counter -->
+        <div class="flex items-center gap-1.5 text-vtPurple font-black" title="Số từ đã mở khóa qua Flashcard">
+          <i class="fa-solid fa-circle-check text-sm text-vtPurple"></i>
+          <span id="statUnlockedWordCount">6</span><span class="text-slate-300">/</span><span id="statTotalWordCount" class="text-slate-400">167</span>
+        </div>
+
+        <!-- Starred Words Filter -->
+        <div class="flex items-center gap-1.5 text-amber-500 cursor-pointer hover:opacity-80 transition" onclick="toggleStarredOnlyFilter()" title="Xem từ đã gắn sao">
+          <i class="fa-solid fa-star text-sm text-amber-400"></i>
+          <span id="statStarredCount">0</span>
+        </div>
+
+        <!-- User Authentication Badge / Sign-In Button Container -->
+        <div id="userAuthArea" class="flex items-center">
+          <!-- Injected via auth.js -->
+        </div>
+
+        <!-- Unified Settings Gear Button -->
+        <button onclick="openSettingsModal()" class="w-9 h-9 rounded-2xl bg-white border-2 border-vtGrayBorder hover:border-vtPurple text-slate-600 hover:text-vtPurple flex items-center justify-center transition shadow-xs cursor-pointer" title="Cài đặt (Màu sắc, Ảnh nền, Độ trong suốt, Âm thanh)">
+          <i class="fa-solid fa-gear text-base"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- MAIN NAVIGATION TABS (Soft Style) -->
+    <div class="max-w-4xl mx-auto px-2 flex items-center justify-around sm:justify-start sm:gap-2 text-xs font-extrabold text-slate-500 overflow-x-auto">
+      <button onclick="switchNav('flashcards')" id="tab-flashcards" class="nav-tab py-2.5 px-3 sm:px-5 border-b-[3px] border-vtPurple text-vtPurple flex items-center gap-1.5 shrink-0">
+        <i class="fa-regular fa-clone text-sm"></i>
+        <span>Thẻ từ</span>
+      </button>
+
+      <button onclick="switchNav('quiz')" id="tab-quiz" class="nav-tab py-2.5 px-3 sm:px-5 border-b-[3px] border-transparent hover:text-slate-700 flex items-center gap-1.5 shrink-0">
+        <i class="fa-solid fa-list-check text-sm"></i>
+        <span>Trắc nghiệm</span>
+      </button>
+
+      <button onclick="switchNav('match')" id="tab-match" class="nav-tab py-2.5 px-3 sm:px-5 border-b-[3px] border-transparent hover:text-slate-700 flex items-center gap-1.5 shrink-0">
+        <i class="fa-solid fa-puzzle-piece text-sm"></i>
+        <span>Nối từ</span>
+      </button>
+
+      <button onclick="switchNav('type')" id="tab-type" class="nav-tab py-2.5 px-3 sm:px-5 border-b-[3px] border-transparent hover:text-slate-700 flex items-center gap-1.5 shrink-0">
+        <i class="fa-solid fa-keyboard text-sm"></i>
+        <span>Gõ từ vựng</span>
+      </button>
+
+      <button onclick="switchNav('albums')" id="tab-albums" class="nav-tab py-2.5 px-3 sm:px-5 border-b-[3px] border-transparent hover:text-slate-700 flex items-center gap-1.5 shrink-0">
+        <i class="fa-solid fa-layer-group text-sm"></i>
+        <span>Album từ vựng</span>
+      </button>
+
+      <button onclick="switchNav('add')" id="tab-add" class="nav-tab py-2.5 px-3 sm:px-5 border-b-[3px] border-transparent hover:text-slate-700 flex items-center gap-1.5 shrink-0">
+        <i class="fa-solid fa-plus-circle text-sm"></i>
+        <span>Thêm / Word</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN APP CONTAINER -->
+  <main class="w-full max-w-2xl px-4 py-6 flex-1 flex flex-col z-10">
+
+    <!-- ACTIVE ALBUM INDICATOR BANNER -->
+    <div class="w-full mb-3 flex items-center justify-between gap-2 px-1">
+      <div onclick="switchNav('albums')" class="cursor-pointer bg-white/90 hover:bg-white border-2 border-vtGrayBorder hover:border-vtPurple px-3 py-1.5 rounded-2xl text-slate-800 font-extrabold text-xs flex items-center gap-2 transition shadow-2xs group" title="Đổi Album từ vựng">
+        <i class="fa-solid fa-layer-group text-vtPurple group-hover:scale-110 transition"></i>
+        <span>Album: <strong id="activeAlbumNameLabel" class="text-vtPurpleDark font-black">167 Từ Vựng Gốc</strong></span>
+        <i class="fa-solid fa-chevron-right text-[10px] text-slate-400 group-hover:translate-x-0.5 transition"></i>
+      </div>
+      <button onclick="switchNav('albums')" class="text-xs font-black text-vtPurple hover:underline flex items-center gap-1">
+        <i class="fa-solid fa-folder-plus"></i> Tạo Album mới
+      </button>
+    </div>
+
+    <!-- SMART SCOPE REMINDER BANNER -->
+    <div class="w-full glass-card rounded-2xl p-3 sm:p-4 border-2 border-vtGrayBorder shadow-sm mb-5 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-xl bg-vtPurpleLight text-vtPurpleDark flex items-center justify-center font-bold text-sm shrink-0">
+          <i class="fa-solid fa-bullseye"></i>
+        </div>
+        <div>
+          <p class="text-xs font-black text-slate-800">
+            Phạm vi luyện tập: <span id="scopeNoticeLabel" class="text-vtPurpleDark font-extrabold">Từ đã xem ở Flashcards</span>
+          </p>
+          <p class="text-[11px] text-slate-400 font-semibold">Trắc nghiệm, Nối từ và Gõ từ vựng chỉ lấy từ vựng trong các card bạn đã học.</p>
+        </div>
+      </div>
+      <button onclick="toggleGlobalScopeMode()" id="btnScopeToggle" class="px-3 py-1.5 rounded-xl border-2 border-slate-200 text-slate-600 hover:border-vtPurple hover:text-vtPurple text-xs font-black uppercase transition shrink-0 bg-white">
+        Tất cả từ
+      </button>
+    </div>
+
+    <!-- TAB 1: THẺ TỪ (FLASHCARDS) -->
+    <div id="view-flashcards" class="view-panel flex flex-col items-center">
+      
+      <!-- Card Position and progress -->
+      <div class="w-full flex items-center justify-between mb-3 text-xs font-bold text-slate-500">
+        <span>Thẻ <strong id="fcCurrentIdx" class="text-slate-800 text-sm">1</strong> / <span id="fcTotalCount">167</span></span>
+        <button onclick="shuffleCardDeck()" class="text-vtPurple hover:underline flex items-center gap-1 font-extrabold">
+          <i class="fa-solid fa-shuffle"></i> Đảo thứ tự
+        </button>
+      </div>
+
+      <!-- VocabTime Progress Bar -->
+      <div class="w-full bg-slate-200 h-3 rounded-full overflow-hidden mb-6">
+        <div id="fcProgressBar" class="bg-vtPurple h-full rounded-full transition-all duration-300" style="width: 5%"></div>
+      </div>
+
+      <!-- 3D Card Area -->
+      <div class="w-full h-80 perspective-1000 cursor-pointer select-none" onclick="flipActiveCard()">
+        <div id="flashcardBox" class="relative w-full h-full duration-500 transform-style-3d rounded-3xl">
+          
+          <!-- Front Side (English) -->
+          <div class="absolute inset-0 glass-card border-2 border-vtGrayBorder border-b-4 border-b-slate-300 rounded-3xl p-6 sm:p-8 flex flex-col justify-between backface-hidden shadow-sm hover:border-vtPurpleBorder transition">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-black uppercase tracking-wider text-vtPurple bg-vtPurpleLight px-3 py-1 rounded-full border border-vtPurpleBorder">
+                English Term
+              </span>
+              <button onclick="event.stopPropagation(); toggleStarCard()" id="btnCardStar" class="w-9 h-9 rounded-xl text-slate-300 hover:text-amber-400 flex items-center justify-center transition text-lg">
+                <i class="fa-regular fa-star"></i>
+              </button>
+            </div>
+
+            <!-- Main English Word -->
+            <div class="text-center my-auto">
+              <h2 id="fcEnText" class="text-3xl sm:text-4xl font-black text-slate-800 tracking-tight leading-tight">
+                Business Administration
+              </h2>
+              <p class="text-xs font-bold text-slate-400 mt-2">Chạm hoặc nhấn phím Space để xem nghĩa</p>
+            </div>
+
+            <!-- Audio Pronunciation Button -->
+            <div class="flex items-center justify-between pt-2">
+              <span class="text-xs font-bold text-slate-400">
+                <i class="fa-solid fa-arrows-rotate mr-1"></i> Lật thẻ
+              </span>
+              <button onclick="event.stopPropagation(); playCardVoice()" class="w-11 h-11 rounded-2xl bg-vtPurple text-white flex items-center justify-center shadow-[0_3px_0_var(--vt-dark)] active:translate-y-1 active:shadow-none transition" title="Nghe phát âm">
+                <i class="fa-solid fa-volume-high text-base"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Back Side (Vietnamese) -->
+          <div class="absolute inset-0 bg-vtPurple border-2 border-vtPurpleDark border-b-4 border-b-vtPurpleDark rounded-3xl p-6 sm:p-8 flex flex-col justify-between backface-hidden rotate-y-180 text-white shadow-md">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-black uppercase tracking-wider text-white bg-vtPurpleDark/50 px-3 py-1 rounded-full border border-white/20">
+                Nghĩa tiếng Việt
+              </span>
+              <span id="fcBackWordHint" class="text-xs font-bold text-white/80">Word</span>
+            </div>
+
+            <div class="text-center my-auto">
+              <h3 id="fcViText" class="text-2xl sm:text-3xl font-black text-white leading-relaxed">
+                Quản trị Kinh doanh
+              </h3>
+            </div>
+
+            <div class="text-center text-xs font-bold text-white/80">
+              <i class="fa-solid fa-rotate-left mr-1"></i> Chạm để quay lại
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Navigation Arrows -->
+      <div class="w-full flex items-center justify-between gap-3 mt-6">
+        <button onclick="prevActiveCard()" class="flex-1 py-3.5 px-4 rounded-2xl btn-vt-white font-black text-sm text-slate-700 flex items-center justify-center gap-2">
+          <i class="fa-solid fa-chevron-left"></i> Từ trước
+        </button>
+
+        <button onclick="nextActiveCard()" class="flex-1 py-3.5 px-4 rounded-2xl btn-vt-purple text-white font-black text-sm flex items-center justify-center gap-2">
+          Tiếp theo <i class="fa-solid fa-chevron-right"></i>
+        </button>
+      </div>
+
+    </div>
+
+    <!-- TAB 2: TRẮC NGHIỆM (QUIZ) -->
+    <div id="view-quiz" class="view-panel hidden flex-col">
+      <!-- Top question status -->
+      <div class="flex items-center justify-between mb-3 text-xs font-black text-slate-500">
+        <span>CÂU <span id="quizCurrentNum" class="text-slate-800 text-sm">1</span> / <span id="quizTotalNum">10</span></span>
+        <button onclick="startQuizRound()" class="text-vtPurple hover:underline flex items-center gap-1 font-bold">
+          <i class="fa-solid fa-shuffle"></i> Đảo đề mới
+        </button>
+      </div>
+
+      <!-- Mini Progress Bar -->
+      <div class="w-full bg-slate-200 h-3 rounded-full overflow-hidden mb-6">
+        <div id="quizProgressBar" class="bg-vtPurple h-full rounded-full transition-all duration-300" style="width: 10%"></div>
+      </div>
+
+      <!-- Question Word Card -->
+      <div class="glass-card rounded-3xl p-6 sm:p-8 border-2 border-vtGrayBorder border-b-4 border-b-slate-300 text-center mb-5">
+        <span class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Chọn nghĩa đúng của từ này:</span>
+        <div class="flex items-center justify-center gap-3 mt-2">
+          <h2 id="quizQuestionWord" class="text-3xl sm:text-4xl font-black text-slate-800">
+            Word
+          </h2>
+          <button onclick="playVoiceText(currentQuizQuestion.en)" class="w-9 h-9 rounded-xl bg-vtPurpleLight text-vtPurple border border-vtPurpleBorder flex items-center justify-center hover:bg-purple-100 transition" title="Nghe phát âm">
+            <i class="fa-solid fa-volume-high text-sm"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- 4 Option Choices -->
+      <div id="quizOptionsContainer" class="space-y-3 mb-4">
+        <!-- Generated by JS -->
+      </div>
+
+      <!-- Feedback Banner -->
+      <div id="quizFeedbackBanner" class="hidden rounded-2xl p-4 mb-4 border-2 transition-all">
+        <!-- Content injected by JS -->
+      </div>
+
+      <!-- Next button -->
+      <button id="btnQuizNext" onclick="nextQuizQuestion()" class="hidden w-full py-4 rounded-2xl btn-vt-purple text-white font-black text-sm uppercase tracking-wider">
+        Tiếp tục <i class="fa-solid fa-arrow-right ml-1"></i>
+      </button>
+    </div>
+
+    <!-- TAB 3: NỐI TỪ (MATCH) -->
+    <div id="view-match" class="view-panel hidden flex-col">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h3 class="font-black text-lg text-slate-800">Nối cặp từ (Match)</h3>
+          <p class="text-xs font-bold text-slate-400">Nhấp chọn 1 từ tiếng Anh và 1 nghĩa tiếng Việt tương ứng</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <span id="matchTimer" class="px-3 py-1.5 rounded-xl glass-card border-2 border-vtGrayBorder text-xs font-mono font-black text-vtPurple">
+            00:00
+          </span>
+          <button onclick="startMatchGame()" class="p-2 rounded-xl glass-card border-2 border-vtGrayBorder text-slate-500 hover:text-vtPurple text-xs font-bold" title="Đảo 6 cặp khác">
+            <i class="fa-solid fa-shuffle"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- 6 Pairs (12 Cards Grid) -->
+      <div id="matchCardsGrid" class="grid grid-cols-2 gap-3 mb-4">
+        <!-- Generated by JS -->
+      </div>
+
+      <!-- Victory Sheet -->
+      <div id="matchVictorySheet" class="hidden bg-vtPurpleLight border-2 border-vtPurple rounded-2xl p-5 text-center mb-4">
+        <div class="w-12 h-12 rounded-full bg-vtPurple text-white flex items-center justify-center text-xl font-black mx-auto mb-2 shadow-[0_2px_0_var(--vt-dark)]">
+          <i class="fa-solid fa-check"></i>
+        </div>
+        <h4 class="font-black text-lg text-vtPurpleDark">Tuyệt vời! Ghép hoàn tất!</h4>
+        <p class="text-xs font-bold text-slate-600 mt-1">Thời gian hoàn thành: <span id="matchRecordTime" class="font-black">00:00</span></p>
+        <button onclick="startMatchGame()" class="mt-3 px-6 py-3 rounded-2xl btn-vt-purple text-white font-black text-xs uppercase tracking-wider">
+          Chơi ván khác
+        </button>
+      </div>
+    </div>
+
+    <!-- TAB 4: GÕ TỪ VỰNG (RECALL / TYPE-IN) -->
+    <div id="view-type" class="view-panel hidden flex-col">
+      <div class="flex items-center justify-between mb-3 text-xs font-black text-slate-500">
+        <span class="text-vtPurple flex items-center gap-1">
+          <i class="fa-solid fa-check-double"></i> Đã gõ đúng: <strong id="typeCorrectCount" class="text-slate-800">0</strong>
+        </span>
+        <button onclick="initTypeSession()" class="text-vtPurple hover:underline flex items-center gap-1 font-bold">
+          <i class="fa-solid fa-shuffle"></i> Đảo từ khác
+        </button>
+      </div>
+
+      <!-- Prompt Card: ONLY Vietnamese text, NO hints / NO word counts -->
+      <div class="glass-card rounded-3xl p-6 sm:p-8 border-2 border-vtGrayBorder border-b-4 border-b-slate-300 text-center mb-5">
+        <span class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Nghĩa tiếng Việt</span>
+        <h2 id="typeTargetVi" class="text-2xl sm:text-3xl font-black text-slate-800 mt-2 min-h-[3.5rem] flex items-center justify-center leading-snug">
+          ...
+        </h2>
+        <div id="typeHintBadge" class="hidden text-xs font-extrabold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1 rounded-full mt-2 inline-block"></div>
+      </div>
+
+      <!-- Type Input Form -->
+      <form id="typeForm" onsubmit="handleTypeCheck(event)" class="space-y-3 mb-4">
+        <div class="relative">
+          <input 
+            type="text" 
+            id="typeInputWord" 
+            autocomplete="off" 
+            autocorrect="off" 
+            autocapitalize="off" 
+            spellcheck="false"
+            placeholder="Gõ từ tiếng Anh tương ứng..." 
+            class="w-full px-5 py-4 pr-12 rounded-2xl bg-white border-2 border-vtGrayBorder border-b-4 border-b-slate-300 focus:border-vtPurple focus:border-b-vtPurpleDark text-slate-800 font-extrabold text-base sm:text-lg outline-none transition placeholder-slate-400"
+          />
+          <button 
+            type="button" 
+            onclick="triggerTypeFirstLetterHint()" 
+            title="Gợi ý chữ cái đầu"
+            class="absolute right-3.5 top-3.5 w-8 h-8 rounded-xl bg-slate-100 hover:bg-amber-100 text-slate-400 hover:text-amber-600 flex items-center justify-center transition text-xs"
+          >
+            <i class="fa-solid fa-lightbulb"></i>
+          </button>
+        </div>
+
+        <div class="flex items-center gap-2.5">
+          <button 
+            type="submit" 
+            id="btnTypeCheck" 
+            class="flex-1 py-4 rounded-2xl btn-vt-purple text-white font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <span>Kiểm tra</span>
+            <kbd class="text-[10px] bg-vtPurpleDark px-2 py-0.5 rounded text-white font-mono">Enter</kbd>
+          </button>
+
+          <button 
+            type="button" 
+            onclick="skipTypeWord()" 
+            class="py-4 px-5 rounded-2xl btn-vt-white font-black text-xs sm:text-sm text-slate-600 uppercase tracking-wider"
+          >
+            Xem đáp án
+          </button>
+        </div>
+      </form>
+
+      <!-- Result Banner -->
+      <div id="typeResultBanner" class="hidden rounded-2xl p-4 mb-4 border-2 transition-all">
+        <!-- Injected via JS -->
+      </div>
+    </div>
+
+    <!-- TAB 5: THÊM TỪ VỰNG & NHẬP FILE WORD (.DOCX) -->
+    <div id="view-add" class="view-panel hidden flex-col">
+      <div class="glass-card rounded-3xl p-6 border-2 border-vtGrayBorder border-b-4 border-b-slate-300 mb-5">
+        <h3 class="font-black text-lg text-slate-800 mb-1">Thêm từ vựng mới</h3>
+        <p class="text-xs font-bold text-slate-400 mb-4">Nhập trực tiếp từ tiếng Anh và nghĩa tiếng Việt tương ứng.</p>
+
+        <form onsubmit="handleSingleWordAdd(event)" class="space-y-3">
+          <div>
+            <label class="block text-xs font-extrabold uppercase text-slate-500 mb-1">Từ hoặc cụm từ tiếng Anh</label>
+            <input 
+              type="text" 
+              id="newEnWordInput" 
+              required
+              placeholder="Ví dụ: persistent" 
+              class="w-full px-4 py-3 rounded-xl bg-slate-50 border-2 border-slate-200 focus:bg-white focus:border-vtPurple text-sm font-bold text-slate-800 outline-none transition"
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs font-extrabold uppercase text-slate-500 mb-1">Nghĩa tiếng Việt</label>
+            <input 
+              type="text" 
+              id="newViWordInput" 
+              required
+              placeholder="Ví dụ: kiên trì, bền bỉ" 
+              class="w-full px-4 py-3 rounded-xl bg-slate-50 border-2 border-slate-200 focus:bg-white focus:border-vtPurple text-sm font-bold text-slate-800 outline-none transition"
+            />
+          </div>
+
+          <button type="submit" class="w-full py-3.5 rounded-2xl btn-vt-purple text-white font-black text-xs uppercase tracking-wider mt-2">
+            <i class="fa-solid fa-plus mr-1"></i> Thêm vào danh sách từ vựng
+          </button>
+        </form>
+
+        <div id="singleWordSuccessToast" class="hidden mt-3 p-3 rounded-xl bg-vtPurpleLight border border-vtPurple text-vtPurpleDark font-bold text-xs text-center"></div>
+      </div>
+
+      <!-- Import file Word (.docx) Box -->
+      <div class="glass-card rounded-3xl p-6 border-2 border-vtGrayBorder border-b-4 border-b-slate-300 mb-5">
+        <div class="flex items-center gap-2 mb-1">
+          <i class="fa-solid fa-file-word text-vtPurple text-xl"></i>
+          <h3 class="font-black text-lg text-slate-800">Nhập từ file Word (.docx) hoặc .txt</h3>
+        </div>
+        <p class="text-xs font-bold text-slate-400 mb-4">
+          Tải file Word chứa danh sách từ vựng theo dạng <code class="bg-slate-100 text-vtPurple px-1.5 py-0.5 rounded font-mono">– word - nghĩa</code> hoặc <code class="bg-slate-100 text-vtPurple px-1.5 py-0.5 rounded font-mono">word : nghĩa</code>.
+        </p>
+
+        <!-- Drag & Drop Upload Zone -->
+        <label for="docxUploadInput" class="w-full border-2 border-dashed border-slate-300 hover:border-vtPurple rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer bg-slate-50 hover:bg-slate-100 transition group">
+          <i class="fa-solid fa-cloud-arrow-up text-3xl text-slate-400 group-hover:text-vtPurple mb-2 transition"></i>
+          <span class="text-xs font-black text-slate-700">Chọn file .docx hoặc .txt từ máy</span>
+          <span class="text-[11px] font-semibold text-slate-400 mt-0.5">Xử lý trực tiếp trên trình duyệt, an toàn</span>
+          <input type="file" id="docxUploadInput" accept=".docx,.txt" onchange="handleFileUpload(event)" class="hidden" />
+        </label>
+
+        <!-- Or Paste text -->
+        <div class="mt-4 pt-3 border-t border-slate-100">
+          <div class="flex items-center justify-between mb-1.5 text-xs font-bold text-slate-600">
+            <span>Hoặc dán văn bản từ vựng vào đây:</span>
+            <button type="button" onclick="pasteSampleList()" class="text-vtPurple hover:underline text-[11px]">Dán mẫu</button>
+          </div>
+          <textarea 
+            id="pasteTextarea" 
+            rows="3" 
+            placeholder="– syllabus - đề cương môn học&#10;– deadline - hạn chót" 
+            class="w-full p-3 rounded-xl bg-slate-50 border-2 border-slate-200 text-xs font-mono text-slate-800 outline-none focus:bg-white focus:border-vtPurple resize-none"
+          ></textarea>
+          <button 
+            type="button" 
+            onclick="processPastedContent()" 
+            class="w-full mt-2 py-3 rounded-2xl btn-vt-purple text-white font-black text-xs uppercase tracking-wider"
+          >
+            <i class="fa-solid fa-file-import mr-1"></i> Trích xuất từ vựng
+          </button>
+        </div>
+
+        <div id="uploadStatusMessage" class="hidden mt-3 p-3 rounded-xl text-xs font-bold text-center"></div>
+      </div>
+
+      <!-- Preview Drawer for Extracted Words -->
+      <div id="importPreviewDrawer" class="hidden glass-card rounded-3xl p-6 border-2 border-vtPurple border-b-4 border-b-vtPurpleDark">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
+          <div>
+            <h4 class="font-black text-sm text-slate-800">Từ vựng tìm thấy</h4>
+            <p class="text-xs font-bold text-vtPurpleDark">Có <span id="previewCountText">0</span> từ mới chưa có trong danh sách</p>
+          </div>
+          <button onclick="confirmBatchImport()" class="px-4 py-2 rounded-xl btn-vt-purple text-white text-xs font-black uppercase tracking-wider">
+            Xác nhận thêm
+          </button>
+        </div>
+        <div id="previewItemsList" class="max-h-48 overflow-y-auto divide-y divide-slate-100 text-xs font-bold"></div>
+      </div>
+    </div>
+
+    <!-- TAB 6: ALBUM TỪ VỰNG (ALBUMS MANAGEMENT) -->
+    <div id="view-albums" class="view-panel hidden max-w-4xl mx-auto px-1 py-2 w-full">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 glass-card rounded-3xl p-5 border-2 border-vtGrayBorder">
+        <div>
+          <h2 class="text-lg sm:text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+            <i class="fa-solid fa-layer-group text-vtPurple"></i> Album Từ Vựng Của Bạn
+          </h2>
+          <p class="text-xs font-bold text-slate-400 mt-0.5">Tạo các Album từ vựng theo chủ đề (TOEIC, IELTS, Giao tiếp...) để chuyển qua lại học cực dễ dàng!</p>
+        </div>
+        <button onclick="openCreateAlbumModal()" class="px-4 py-2.5 rounded-2xl btn-vt-purple text-white font-black text-xs flex items-center justify-center gap-1.5 shrink-0 shadow-2xs cursor-pointer">
+          <i class="fa-solid fa-plus"></i> Tạo Album mới
+        </button>
+      </div>
+
+      <!-- Album Cards Grid -->
+      <div id="albumsGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <!-- Rendered dynamically via JS -->
+      </div>
+    </div>
+
+  </main>
+
+  <!-- CREATE NEW ALBUM MODAL -->
+  <div id="createAlbumModal" class="fixed inset-0 z-50 hidden bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4" onclick="closeCreateAlbumModal(event)">
+    <div class="glass-card rounded-3xl p-6 max-w-md w-full border-2 border-vtGrayBorder shadow-2xl relative" onclick="event.stopPropagation()">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-200 mb-4">
+        <h3 class="font-black text-base text-slate-800 flex items-center gap-2">
+          <i class="fa-solid fa-folder-plus text-vtPurple"></i> Tạo Album Từ Vựng Mới
+        </h3>
+        <button onclick="closeCreateAlbumModal()" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center text-sm font-bold cursor-pointer">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <form onsubmit="handleCreateAlbumSubmit(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-black uppercase text-slate-500 mb-1">Tên Album *</label>
+          <input type="text" id="newAlbumNameInput" required placeholder="Ví dụ: Từ Vựng TOEIC 800+, Chuyên Ngành..." class="w-full p-3 rounded-xl bg-slate-50 border-2 border-slate-200 font-bold text-xs outline-none focus:bg-white focus:border-vtPurple">
+        </div>
+        <div>
+          <label class="block text-xs font-black uppercase text-slate-500 mb-1">Mô tả ngắn</label>
+          <input type="text" id="newAlbumDescInput" placeholder="Ví dụ: Bộ từ vựng cần nhớ cho kỳ thi tháng này" class="w-full p-3 rounded-xl bg-slate-50 border-2 border-slate-200 font-bold text-xs outline-none focus:bg-white focus:border-vtPurple">
+        </div>
+        <button type="submit" class="w-full py-3 rounded-2xl btn-vt-purple text-white font-black text-xs uppercase tracking-wider cursor-pointer">
+          <i class="fa-solid fa-check mr-1"></i> Tạo Album & Bắt đầu nạp từ
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- UNIFIED SETTINGS MODAL -->
+  <div id="settingsModal" class="fixed inset-0 z-50 hidden bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4" onclick="closeSettingsModal(event)">
+    <div class="glass-card rounded-3xl p-6 max-w-lg w-full border-2 border-vtGrayBorder shadow-2xl relative max-h-[90vh] flex flex-col" onclick="event.stopPropagation()">
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between pb-3 border-b border-slate-200 mb-4 shrink-0">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-2xl bg-vtPurpleLight text-vtPurple flex items-center justify-center text-base font-black">
+            <i class="fa-solid fa-gear"></i>
+          </div>
+          <div>
+            <h3 class="font-black text-base sm:text-lg text-slate-800">Cài Đặt Ứng Dụng</h3>
+            <p class="text-[11px] font-bold text-slate-400">Tùy chỉnh màu sắc, hình nền, độ trong suốt & âm thanh</p>
+          </div>
+        </div>
+        <button onclick="closeSettingsModal()" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center text-sm font-bold cursor-pointer">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="space-y-5 overflow-y-auto pr-1 flex-1">
+        <!-- Section 0: Tài Khoản Người Dùng (Google Auth) -->
+        <div id="settingsModalAuthSection" class="pb-3 border-b border-slate-100">
+          <!-- Injected via auth.js -->
+        </div>
+
+        <!-- Section 1: Tông Màu Giao Diện (10 Màu) -->
+        <div>
+          <h4 class="text-xs font-black uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
+            <i class="fa-solid fa-palette text-vtPurple"></i> Tông màu chủ đạo (10 màu)
+          </h4>
+          <div id="themeGrid" class="grid grid-cols-2 gap-2 max-h-44 overflow-y-auto">
+            <!-- Injected via JS -->
+          </div>
+        </div>
+
+        <!-- Section 2: Độ Trong Suốt Elements (Glass Opacity Slider) -->
+        <div class="pt-3 border-t border-slate-100">
+          <div class="flex items-center justify-between mb-1.5">
+            <h4 class="text-xs font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+              <i class="fa-solid fa-droplet text-vtPurple"></i> Độ trong suốt khung thẻ (Elements)
+            </h4>
+            <span id="glassOpacityValLabel" class="text-xs font-black text-vtPurple bg-vtPurpleLight px-2 py-0.5 rounded-lg border border-vtPurpleBorder">82%</span>
+          </div>
+          <input 
+            type="range" 
+            id="glassOpacityInput" 
+            min="20" 
+            max="100" 
+            value="82" 
+            oninput="applyGlassOpacity(this.value / 100)"
+            class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-vtPurple"
+          />
+          <p class="text-[11px] font-semibold text-slate-400 mt-1">Kéo thanh trượt để chỉnh các thẻ mờ trong suốt hoặc rõ nét hơn trên nền ảnh.</p>
+        </div>
+
+        <!-- Section 3: Hình Nền & Lớp Sương Phủ -->
+        <div class="pt-3 border-t border-slate-100">
+          <h4 class="text-xs font-black uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
+            <i class="fa-regular fa-image text-vtPurple"></i> Hình nền tùy chỉnh & Sương phủ
+          </h4>
+          
+          <div class="flex flex-wrap items-center gap-2">
+            <label for="bgImageInputSettings" class="px-3.5 py-2 rounded-xl border-2 border-vtGrayBorder hover:border-vtPurple text-slate-700 hover:text-vtPurple cursor-pointer text-xs font-black bg-white transition shadow-2xs flex items-center gap-1.5">
+              <i class="fa-solid fa-upload text-vtPurple"></i> Chọn ảnh từ máy
+              <input type="file" id="bgImageInputSettings" accept="image/*" onchange="handleBackgroundUpload(event)" class="hidden" />
+            </label>
+
+            <button onclick="cycleMistLevel()" class="px-3.5 py-2 rounded-xl border-2 border-vtGrayBorder hover:border-vtPurple text-slate-700 hover:text-vtPurple cursor-pointer text-xs font-black bg-white transition shadow-2xs flex items-center gap-1.5">
+              <i class="fa-solid fa-smog text-vtPurple"></i> Lớp sương: <span id="settingsMistLabel" class="text-vtPurple font-extrabold">Sương vừa</span>
+            </button>
+
+            <button id="settingsBtnRemoveBg" onclick="removeCustomBackground()" class="hidden px-3.5 py-2 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 cursor-pointer text-xs font-black transition flex items-center gap-1.5">
+              <i class="fa-solid fa-trash-can"></i> Xóa ảnh nền
+            </button>
+          </div>
+        </div>
+
+        <!-- Section 4: Âm Thanh & Tự Động Phát Âm -->
+        <div class="pt-3 border-t border-slate-100">
+          <h4 class="text-xs font-black uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
+            <i class="fa-solid fa-volume-high text-vtPurple"></i> Âm thanh & Phát âm
+          </h4>
+          
+          <label class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700 select-none bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+            <input type="checkbox" id="settingsChkAutoVoice" onchange="toggleAutoVoice(this.checked)" class="rounded text-vtPurple focus:ring-0">
+            <span>Tự động phát âm tiếng Anh khi lật sang thẻ từ mới ở Flashcards</span>
+          </label>
+        </div>
+
+        <!-- Section 5: Quản Lý Dữ Liệu Từ Vựng -->
+        <div class="pt-3 border-t border-slate-100">
+          <h4 class="text-xs font-black uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
+            <i class="fa-solid fa-trash-arrow-up text-rose-500"></i> Quản lý dữ liệu từ vựng
+          </h4>
+          <button type="button" onclick="resetVocabularyList()" class="w-full py-3 px-4 rounded-2xl bg-rose-50 hover:bg-rose-100 border-2 border-rose-200 text-rose-700 font-black text-xs cursor-pointer flex items-center justify-center gap-2 transition shadow-xs">
+            <i class="fa-solid fa-trash-can text-rose-500"></i>
+            <span>Xóa toàn bộ từ vựng đã nạp (Đặt lại về 167 từ gốc)</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modular JavaScript Scripts -->
+  <script src="js/firebase-config.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/theme.js"></script>
+  <script src="js/games.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
